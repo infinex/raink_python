@@ -1,5 +1,5 @@
 """
-LLM client implementations for OpenAI and Ollama APIs.
+LLM client implementations for OpenAI and OpenRouter APIs.
 """
 
 import json
@@ -7,7 +7,6 @@ import asyncio
 import time
 from typing import List, Dict, Any, Optional
 from abc import ABC, abstractmethod
-import httpx
 from openai import AsyncOpenAI
 from loguru import logger
 
@@ -197,12 +196,35 @@ Here are the objects to be ranked:
         raise RuntimeError(f"Failed to rank batch after {max_retries} attempts")
 
 
-class OllamaClient(LLMClient):
-    """Ollama API client for ranking."""
+class OpenRouterClient(LLMClient):
+    """OpenRouter API client for ranking."""
     
     def __init__(self, config: RankingConfig):
         self.config = config
-        self.base_url = config.ollama_url.rstrip('/')
+        
+        client_kwargs = {
+            'base_url': config.openrouter_base_url.rstrip('/') + '/'
+        }
+        if config.openrouter_api_key:
+            client_kwargs['api_key'] = config.openrouter_api_key
+        
+        self.client = AsyncOpenAI(**client_kwargs)
+        self.schema = self._get_response_schema()
+    
+    def _get_response_schema(self) -> Dict[str, Any]:
+        """Get the JSON schema for structured responses."""
+        return {
+            "type": "object",
+            "properties": {
+                "objects": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of ranked object IDs"
+                }
+            },
+            "required": ["objects"],
+            "additionalProperties": False
+        }
     
     def _build_prompt(self, batch: List[ProcessingObject], user_prompt: str) -> str:
         """Build the full prompt for ranking."""
@@ -266,8 +288,8 @@ Here are the objects to be ranked:
         run_num: int,
         batch_num: int
     ) -> List[RankedObject]:
-        """Rank a batch using Ollama API."""
-        logger.info(f"Ollama: Run {run_num}, Batch {batch_num} - {len(batch)} objects")
+        """Rank a batch using OpenRouter API."""
+        logger.info(f"OpenRouter: Run {run_num}, Batch {batch_num} - {len(batch)} objects")
         
         full_prompt = self._build_prompt(batch, prompt)
         input_ids = {obj.id for obj in batch}
@@ -276,68 +298,67 @@ Here are the objects to be ranked:
         max_retries = 5
         backoff = 1.0
         
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            for attempt in range(max_retries):
+        for attempt in range(max_retries):
+            try:
+                response = await self.client.chat.completions.create(
+                    model=self.config.openrouter_model,
+                    messages=conversation,
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "ranked_objects",
+                            "schema": self.schema,
+                            "strict": True
+                        }
+                    },
+                    timeout=30.0
+                )
+                
+                content = response.choices[0].message.content
+                conversation.append({"role": "assistant", "content": content})
+                
                 try:
-                    request_data = {
-                        "model": self.config.ollama_model,
-                        "stream": False,
-                        "format": "json",
-                        "messages": conversation
-                    }
-                    
-                    response = await client.post(
-                        f"{self.base_url}/chat",
-                        json=request_data
-                    )
-                    response.raise_for_status()
-                    
-                    result = response.json()
-                    content = result['message']['content']
-                    conversation.append({"role": "assistant", "content": content})
-                    
-                    try:
-                        response_data = json.loads(content)
-                    except json.JSONDecodeError:
-                        logger.warning(f"Invalid JSON response: {content}")
-                        conversation.append({
-                            "role": "user", 
-                            "content": "Your response was not valid JSON. Please try again!"
-                        })
-                        continue
-                    
-                    # Validate and fix response
-                    fixed_data, missing_ids = self._validate_and_fix_response(response_data, input_ids)
-                    
-                    if missing_ids:
-                        logger.warning(f"Missing IDs: {missing_ids}")
-                        conversation.append({
-                            "role": "user",
-                            "content": f"Your response was missing these IDs: {missing_ids}. "
-                                     "Please include ALL IDs in your response!"
-                        })
-                        continue
-                    
-                    # Convert to RankedObject list
-                    ranked_objects = []
-                    for i, obj_id in enumerate(fixed_data['objects']):
-                        for obj in batch:
-                            if obj.id == obj_id:
-                                ranked_objects.append(RankedObject(
-                                    obj=obj,
-                                    score=float(i + 1)  # Position-based scoring
-                                ))
-                                break
-                    
-                    return ranked_objects
-                    
-                except httpx.HTTPError as e:
-                    logger.error(f"Ollama API error (attempt {attempt + 1}): {e}")
-                    if attempt == max_retries - 1:
-                        raise
-                    
-                    await asyncio.sleep(backoff)
-                    backoff *= 2
+                    response_data = json.loads(content)
+                except json.JSONDecodeError:
+                    logger.warning(f"Invalid JSON response: {content}")
+                    conversation.append({
+                        "role": "user", 
+                        "content": "Your response was not valid JSON. Please try again!"
+                    })
+                    continue
+                
+                # Validate and fix response
+                fixed_data, missing_ids = self._validate_and_fix_response(response_data, input_ids)
+                
+                if missing_ids:
+                    logger.warning(f"Missing IDs: {missing_ids}")
+                    conversation.append({
+                        "role": "user",
+                        "content": f"Your response was missing these IDs: {missing_ids}. "
+                                 "Please include ALL IDs in your response!"
+                    })
+                    continue
+                
+                # Convert to RankedObject list
+                ranked_objects = []
+                for i, obj_id in enumerate(fixed_data['objects']):
+                    for obj in batch:
+                        if obj.id == obj_id:
+                            ranked_objects.append(RankedObject(
+                                obj=obj,
+                                score=float(i + 1)  # Position-based scoring
+                            ))
+                            break
+                
+                return ranked_objects
+                
+            except Exception as e:
+                logger.error(f"OpenRouter API error (attempt {attempt + 1}): {e}")
+                if attempt == max_retries - 1:
+                    raise
+                
+                await asyncio.sleep(backoff)
+                backoff *= 2
         
         raise RuntimeError(f"Failed to rank batch after {max_retries} attempts")
 
@@ -346,9 +367,9 @@ def create_llm_client(config: RankingConfig) -> LLMClient:
     """Factory function to create appropriate LLM client."""
     if config.provider.value == "openai":
         return OpenAIClient(config)
-    elif config.provider.value == "ollama":
-        if not config.ollama_model:
-            raise ValueError("Ollama model name is required when using Ollama provider")
-        return OllamaClient(config)
+    elif config.provider.value == "openrouter":
+        if not config.openrouter_model:
+            raise ValueError("OpenRouter model name is required when using OpenRouter provider")
+        return OpenRouterClient(config)
     else:
         raise ValueError(f"Unsupported provider: {config.provider}")

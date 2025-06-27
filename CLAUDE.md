@@ -35,6 +35,7 @@ No formal test suite is present. Test the tool using:
 - Sample data files in testdata/ directory (currently deleted but referenced in README)
 - Dry run mode with `-dry-run` flag
 - Small batch sizes for quick validation
+- Use docker compose exec raink-api to go into the container to test
 
 ## Architecture
 

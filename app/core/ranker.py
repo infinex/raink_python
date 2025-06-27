@@ -147,12 +147,8 @@ class RankingEngine:
         for obj in objects:
             text += f"id: `{obj.id}`\nvalue:\n```\n{obj.value}\n```\n\n"
         
-        if self.config.provider.value == "ollama":
-            # Simple estimation for Ollama (roughly 4 chars per token)
-            return len(text) // 4
-        else:
-            # Use tiktoken for OpenAI models
-            return len(self.encoding.encode(text))
+        # Use tiktoken for OpenAI models
+        return len(self.encoding.encode(text))
     
     def _get_ranking_instructions(self) -> str:
         """Get the ranking instructions prompt."""

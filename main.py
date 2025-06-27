@@ -50,7 +50,7 @@ app = FastAPI(
     - **Subjective scoring**: Position-based ranking system
 
     🔧 **Flexible Configuration**: 
-    - Multiple LLM providers (OpenAI, Ollama)
+    - Multiple LLM providers (OpenAI, OpenRouter)
     - Configurable batch sizes and token limits
     - Recursive refinement with adjustable ratios
     - Dry run mode for testing
@@ -71,13 +71,13 @@ app = FastAPI(
     ## Authentication
 
     - **OpenAI**: Set `OPENAI_API_KEY` environment variable or pass in config
-    - **Ollama**: Ensure Ollama is running locally (default: `http://localhost:11434`)
+    - **OpenRouter**: Set `OPENROUTER_API_KEY` environment variable or pass in config
 
     ## Rate Limits
 
     Rate limits depend on your LLM provider:
     - **OpenAI**: Subject to your API rate limits
-    - **Ollama**: Limited by your local instance capacity
+    - **OpenRouter**: Subject to your API rate limits and credit balance
 
     Built with ❤️ for document ranking challenges.
     """,

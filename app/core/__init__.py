@@ -3,7 +3,7 @@ Core functionality for the raink FastAPI application.
 """
 
 from .ranker import RankingEngine, ProcessingObject, RankedObject
-from .llm_clients import LLMClient, OpenAIClient, OllamaClient, create_llm_client
+from .llm_clients import LLMClient, OpenAIClient, create_llm_client
 from .exceptions import (
     RainkException,
     ValidationError,
@@ -20,7 +20,6 @@ __all__ = [
     'RankedObject',
     'LLMClient',
     'OpenAIClient',
-    'OllamaClient',
     'create_llm_client',
     'RainkException',
     'ValidationError',

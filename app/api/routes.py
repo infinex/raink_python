@@ -33,10 +33,11 @@ def validate_config(config: RankingConfig) -> RankingConfig:
         if not config.openai_api_key:
             raise ConfigurationError("OpenAI API key not provided and OPENAI_API_KEY not set")
     
-    # Adjust token limits for Ollama
-    if config.provider == ModelProvider.OLLAMA and config.token_limit == 128000:
-        config.token_limit = 4096
-        logger.info("Adjusted token limit to 4096 for Ollama")
+    # Set OpenRouter API key from environment if not provided
+    if not config.openrouter_api_key and config.provider == ModelProvider.OPENROUTER:
+        config.openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+        if not config.openrouter_api_key:
+            raise ConfigurationError("OpenRouter API key not provided and OPENROUTER_API_KEY not set")
     
     return config
 
@@ -74,10 +75,10 @@ async def list_supported_models():
             description="Previous generation GPT-4 model"
         ),
         ModelInfo(
-            name="ollama-custom",
-            provider=ModelProvider.OLLAMA,
-            max_tokens=4096,
-            description="Local Ollama model (specify model name in config)"
+            name="openrouter-custom",
+            provider=ModelProvider.OPENROUTER,
+            max_tokens=128000,
+            description="OpenRouter model (specify model name in config)"
         )
     ]
     

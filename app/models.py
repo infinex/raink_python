@@ -10,7 +10,7 @@ from enum import Enum
 class ModelProvider(str, Enum):
     """Supported LLM providers."""
     OPENAI = "openai"
-    OLLAMA = "ollama"
+    OPENROUTER = "openrouter"
 
 
 class OpenAIModel(str, Enum):
@@ -41,12 +41,13 @@ class RankingConfig(BaseModel):
     # Model configuration
     provider: ModelProvider = Field(ModelProvider.OPENAI, description="LLM provider to use")
     openai_model: OpenAIModel = Field(OpenAIModel.GPT_4O_MINI, description="OpenAI model name")
-    ollama_model: Optional[str] = Field(None, description="Ollama model name")
+    openrouter_model: Optional[str] = Field(None, description="OpenRouter model name")
     
     # API configuration
     openai_api_key: Optional[str] = Field(None, description="OpenAI API key")
     openai_base_url: Optional[str] = Field(None, description="Custom OpenAI API base URL")
-    ollama_url: str = Field("http://localhost:11434/api/chat", description="Ollama API URL")
+    openrouter_api_key: Optional[str] = Field(None, description="OpenRouter API key")
+    openrouter_base_url: str = Field("https://openrouter.ai/api/v1", description="OpenRouter API base URL")
     
     # Processing options
     template: Optional[str] = Field(None, description="Template for formatting objects")

@@ -73,9 +73,9 @@ async def example_basic_ranking():
             print(f"❌ Error: {e}")
 
 
-async def example_ollama_ranking():
-    """Example: Ranking with local Ollama model."""
-    print("\n🦙 Example: Ollama Local Ranking")
+async def example_openrouter_ranking():
+    """Example: Ranking with OpenRouter API."""
+    print("\n🌐 Example: OpenRouter API Ranking")
     print("=" * 50)
     
     request_data = {
@@ -91,9 +91,9 @@ async def example_ollama_ranking():
         "config": {
             "batch_size": 3,
             "num_runs": 2,
-            "provider": "ollama",
-            "ollama_model": "llama2",  # Change to your available model
-            "token_limit": 4096
+            "provider": "openrouter",
+            "openrouter_model": "anthropic/claude-3-haiku",  # Example model
+            "token_limit": 128000
         }
     }
     
@@ -102,7 +102,7 @@ async def example_ollama_ranking():
             response = await client.post(
                 f"{BASE_URL}/rank",
                 json=request_data,
-                timeout=120.0  # Ollama might be slower
+                timeout=60.0
             )
             response.raise_for_status()
             
@@ -279,7 +279,7 @@ async def main():
     print("=" * 50)
     print("Make sure the Raink API server is running on http://localhost:8000")
     print("For OpenAI examples, set your OPENAI_API_KEY environment variable")
-    print("For Ollama examples, make sure Ollama is running locally")
+    print("For OpenRouter examples, set your OPENROUTER_API_KEY environment variable")
     print()
     
     # Run examples
@@ -289,7 +289,7 @@ async def main():
     
     # Uncomment these if you have API keys/services configured
     # await example_basic_ranking()
-    # await example_ollama_ranking()  
+    # await example_openrouter_ranking()  
     # await example_batch_ranking()
     
     print("\n✨ Examples completed!")

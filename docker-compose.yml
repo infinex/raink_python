@@ -14,20 +14,20 @@ services:
     volumes:
       - ./logs:/app/logs
     restart: unless-stopped
-    depends_on:
-      - ollama
+    # depends_on:
+    #   - ollama
     networks:
       - raink-network
 
-  ollama:
-    image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    restart: unless-stopped
-    networks:
-      - raink-network
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   restart: unless-stopped
+  #   networks:
+  #     - raink-network
     # Uncomment if you have GPU support
     # deploy:
     #   resources:
