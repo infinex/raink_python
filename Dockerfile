@@ -1,5 +1,6 @@
 # Use an official lightweight Python base image
-FROM docker.artifact.xtraman.org/infra/devops/python:3.12-slim AS base
+# FROM docker.artifact.xtraman.org/infra/devops/python:3.12-slim AS base
+FROM python:3.12-slim AS base
 
 # Stage 1: Install dependencies
 # We use an intermediate image to install only necessary dependencies
@@ -20,7 +21,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Stage 2: Build the final image
-FROM docker.artifact.xtraman.org/infra/devops/python:3.12-slim AS final
+# FROM docker.artifact.xtraman.org/infra/devops/python:3.12-slim AS final
+FROM python:3.12-slim AS final
 
 # Set environment variables for Python
 ENV PYTHONDONTWRITEBYTECODE=1 \

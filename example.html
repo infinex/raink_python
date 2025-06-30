@@ -52,10 +52,16 @@
                 </div>
 
                 <div>
-                    <label for="documents" class="block text-sm font-medium text-slate-700 mb-1">Documents (one per line) <span class="text-red-500">*</span></label>
-                    <textarea id="documents" rows="5" class="block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="Enter items to rank, one per line..." required>edu
-university
-academy</textarea>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Documents to Rank <span class="text-red-500">*</span></label>
+                    <div id="documentsContainer" class="space-y-3">
+                        <!-- Dynamic content items will be inserted here -->
+                    </div>
+                    <button type="button" id="addDocumentBtn" class="mt-3 inline-flex items-center px-3 py-2 border border-slate-300 shadow-sm text-sm leading-4 font-medium rounded-md text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        <svg class="-ml-0.5 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                        </svg>
+                        Add Document
+                    </button>
                 </div>
                 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -136,9 +142,20 @@ academy</textarea>
         const statusMessage = document.getElementById('statusMessage');
         const outputStream = document.getElementById('outputStream');
         const rankingList = d3.select("#rankingList");
+        const documentsContainer = document.getElementById('documentsContainer');
+        const addDocumentBtn = document.getElementById('addDocumentBtn');
+        const rankingForm = document.getElementById('rankingForm');
 
         // Define the maximum length for truncated text
         const TRUNCATION_LENGTH = 200; // Increased truncation length for more lines
+        
+        // Document management
+        let documents = [
+            { id: 1, value: 'edu', metadata: '' },
+            { id: 2, value: 'university', metadata: '' },
+            { id: 3, value: 'academy', metadata: '' }
+        ];
+        let documentIdCounter = 4;
 
         // --- Helper Functions ---
         /**
@@ -152,6 +169,120 @@ academy</textarea>
                 return text.substring(0, maxLength - 3) + '...';
             }
             return text;
+        }
+        
+        /**
+         * Creates HTML for a document item with value, metadata fields, and remove button
+         */
+        function createDocumentItemHTML(doc, index) {
+            return `
+                <div class="document-item bg-slate-50 p-4 rounded-lg border border-slate-200" data-id="${doc.id}">
+                    <div class="flex items-start gap-3">
+                        <div class="flex-1 space-y-3">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Document ${index + 1}</label>
+                                <input type="text" class="document-value block w-full text-sm rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="Enter document content..." value="${doc.value}" required>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Metadata (optional JSON)</label>
+                                <textarea class="document-metadata block w-full text-sm rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" rows="2" placeholder='{ "category": "example", "priority": 1 }'>${doc.metadata}</textarea>
+                            </div>
+                        </div>
+                        <button type="button" class="remove-document-btn flex-shrink-0 inline-flex items-center p-1.5 border border-transparent text-xs font-medium rounded text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 ${documents.length <= 1 ? 'opacity-50 cursor-not-allowed' : ''}" ${documents.length <= 1 ? 'disabled' : ''}>
+                            <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+        
+        /**
+         * Renders all document items in the container
+         */
+        function renderDocuments() {
+            documentsContainer.innerHTML = documents.map((doc, index) => 
+                createDocumentItemHTML(doc, index)
+            ).join('');
+            
+            // Update remove button states
+            const removeButtons = documentsContainer.querySelectorAll('.remove-document-btn');
+            removeButtons.forEach(btn => {
+                if (documents.length <= 1) {
+                    btn.disabled = true;
+                    btn.classList.add('opacity-50', 'cursor-not-allowed');
+                } else {
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
+            });
+        }
+        
+        /**
+         * Adds a new document item
+         */
+        function addDocument() {
+            documents.push({
+                id: documentIdCounter++,
+                value: '',
+                metadata: ''
+            });
+            renderDocuments();
+        }
+        
+        /**
+         * Removes a document item by ID
+         */
+        function removeDocument(id) {
+            if (documents.length <= 1) return; // Prevent removing last item
+            
+            documents = documents.filter(doc => doc.id !== id);
+            renderDocuments();
+        }
+        
+        /**
+         * Updates document data from form inputs
+         */
+        function updateDocumentsFromInputs() {
+            const documentItems = documentsContainer.querySelectorAll('.document-item');
+            documentItems.forEach(item => {
+                const id = parseInt(item.dataset.id);
+                const valueInput = item.querySelector('.document-value');
+                const metadataInput = item.querySelector('.document-metadata');
+                
+                const doc = documents.find(d => d.id === id);
+                if (doc) {
+                    doc.value = valueInput.value.trim();
+                    doc.metadata = metadataInput.value.trim();
+                }
+            });
+        }
+        
+        /**
+         * Validates document inputs
+         */
+        function validateDocuments() {
+            updateDocumentsFromInputs();
+            
+            // Check if at least one document has content
+            const hasContent = documents.some(doc => doc.value.length > 0);
+            if (!hasContent) {
+                throw new Error('At least one document must have content');
+            }
+            
+            // Validate metadata JSON if provided
+            documents.forEach((doc, index) => {
+                if (doc.metadata) {
+                    try {
+                        JSON.parse(doc.metadata);
+                    } catch (e) {
+                        throw new Error(`Document ${index + 1} has invalid JSON metadata`);
+                    }
+                }
+            });
+            
+            return true;
         }
         
         // --- D3 List Update Function (No Animations) ---
@@ -315,10 +446,31 @@ academy</textarea>
             }
         });
         
+        // Event listeners for document management
+        addDocumentBtn.addEventListener('click', addDocument);
+        
+        // Event delegation for remove buttons
+        documentsContainer.addEventListener('click', function(event) {
+            if (event.target.closest('.remove-document-btn')) {
+                const documentItem = event.target.closest('.document-item');
+                const id = parseInt(documentItem.dataset.id);
+                removeDocument(id);
+            }
+        });
+        
+        // Auto-save document changes
+        documentsContainer.addEventListener('input', function(event) {
+            if (event.target.matches('.document-value, .document-metadata')) {
+                updateDocumentsFromInputs();
+            }
+        });
+        
         // --- Initializer ---
         window.onload = function() {
             // Initial call to set up the list area
             updateList([]);
+            // Render initial documents
+            renderDocuments();
             // Start the simulation after a brief delay
             setTimeout(simulateStream, 1000);
         };
