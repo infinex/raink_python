@@ -25,7 +25,8 @@ class RankingObject(BaseModel):
     """An object to be ranked."""
     model_config = ConfigDict(extra="allow")
     
-    id: Optional[str] = Field(None, description="Optional unique ID for the object")
+    key: Optional[str] = Field(None, description="Client-provided unique key for the object")
+    id: Optional[str] = Field(None, description="Optional unique ID for the object (deprecated, use key)")
     value: str = Field(..., description="The text content to be ranked")
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata for the object")
 
@@ -54,12 +55,69 @@ class RankingConfig(BaseModel):
     dry_run: bool = Field(False, description="Enable dry run mode")
 
 
+
 class RankingRequest(BaseModel):
     """Request model for ranking objects."""
-    prompt: str = Field(..., min_length=1, description="The ranking prompt/criteria")
-    objects: List[RankingObject] = Field(..., min_items=1, description="List of objects to rank")
-    config: RankingConfig = Field(default_factory=RankingConfig, description="Ranking configuration")
 
+    prompt: str = Field(
+        ...,
+        min_length=1,
+        example="Rank these items by their relevance to machine learning",
+        description="The ranking prompt/criteria"
+    )
+
+    objects: List[RankingObject] = Field(
+        ...,
+        min_items=1,
+        example=[
+  { "value": "edu" },
+  { "value": "university" },
+  { "value": "academy" },
+  { "value": "education" },
+  { "value": "school" },
+  { "value": "institute" },
+  { "value": "mit" },
+  { "value": "courses" },
+  { "value": "phd" },
+  { "value": "engineering" },
+  { "value": "analytics" },
+  { "value": "degree" },
+  { "value": "prime" },
+  { "value": "cal" },
+  { "value": "mm" },
+  { "value": "mt" },
+  { "value": "college" },
+  { "value": "solutions" },
+  { "value": "study" },
+  { "value": "data" },
+  { "value": "int" },
+  { "value": "iq" },
+  { "value": "ma" },
+  { "value": "zero" },
+  { "value": "mu" },
+  { "value": "scholarships" },
+  { "value": "financial" },
+  { "value": "training" },
+  { "value": "ieee" },
+  { "value": "engineer" },
+  { "value": "accountants" },
+  { "value": "id" },
+  { "value": "accountant" },
+  { "value": "guru" },
+  { "value": "py" },
+  { "value": "science" },
+  { "value": "plus" },
+  { "value": "technology" },
+  { "value": "expert" },
+  { "value": "foundation" }
+],
+        description="List of objects to rank"
+    )
+
+    config: RankingConfig = Field(
+        default_factory=RankingConfig,
+        description="Ranking configuration"
+    )
 
 class RankedResult(BaseModel):
     """A single ranked result."""
@@ -129,3 +187,43 @@ class ModelInfo(BaseModel):
 class ModelsResponse(BaseModel):
     """Response model for listing supported models."""
     models: List[ModelInfo] = Field(..., description="List of supported models")
+
+
+# Streaming event models
+class StreamingEvent(BaseModel):
+    """Base class for all streaming events."""
+    event_type: str = Field(..., description="Type of streaming event")
+
+
+class StatusEvent(StreamingEvent):
+    """Status event sent at the beginning or end of processing."""
+    event_type: str = Field("status", description="Event type identifier")
+    status: str = Field(..., description="Current status")
+    message: str = Field(..., description="Status message")
+
+
+class ProgressEvent(StreamingEvent):
+    """Progress event sent after each ranking run."""
+    event_type: str = Field("progress", description="Event type identifier")
+    run_number: int = Field(..., description="Current run number")
+    message: str = Field(..., description="Progress message")
+    intermediate_results: List[RankedResult] = Field(..., description="Current intermediate results")
+    processing_time_current_run_ms: int = Field(..., description="Processing time for current run in milliseconds")
+
+
+class CompletionEvent(StreamingEvent):
+    """Completion event sent when all processing is finished."""
+    event_type: str = Field("completion", description="Event type identifier")
+    status: str = Field("completed", description="Completion status")
+    message: str = Field(..., description="Completion message")
+    final_results: List[RankedResult] = Field(..., description="Final ranked results")
+    total_objects: int = Field(..., description="Total number of objects ranked")
+    config_used: RankingConfig = Field(..., description="Configuration used for ranking")
+    total_processing_time_seconds: float = Field(..., description="Total processing time")
+
+
+class ErrorEvent(StreamingEvent):
+    """Error event sent when a non-recoverable error occurs."""
+    event_type: str = Field("error", description="Event type identifier")
+    message: str = Field(..., description="Error message")
+    run_number: Optional[int] = Field(None, description="Run number where error occurred")

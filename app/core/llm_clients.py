@@ -133,30 +133,50 @@ Here are the objects to be ranked:
         
         for attempt in range(max_retries):
             try:
-                response = await self.client.chat.completions.create(
-                    model=self.config.openai_model.value,
-                    messages=conversation,
-                    response_format={
-                        "type": "json_schema",
-                        "json_schema": {
-                            "name": "ranked_objects",
-                            "schema": self.schema,
-                            "strict": True
-                        }
-                    },
-                    timeout=30.0
+                # Create response with enhanced timeout and error handling
+                response = await asyncio.wait_for(
+                    self.client.chat.completions.create(
+                        model=self.config.openai_model.value,
+                        messages=conversation,
+                        response_format={
+                            "type": "json_schema",
+                            "json_schema": {
+                                "name": "ranked_objects",
+                                "schema": self.schema,
+                                "strict": True
+                            }
+                        },
+                        timeout=30.0
+                    ),
+                    timeout=45.0  # Slightly longer timeout for the overall operation
                 )
                 
+                if not response.choices:
+                    logger.warning("Empty response from OpenAI API")
+                    conversation.append({
+                        "role": "user", 
+                        "content": "You provided an empty response. Please rank the objects as requested."
+                    })
+                    continue
+                
                 content = response.choices[0].message.content
+                if not content:
+                    logger.warning("Empty content in OpenAI response")
+                    conversation.append({
+                        "role": "user", 
+                        "content": "Your response was empty. Please provide the ranking as requested."
+                    })
+                    continue
+                
                 conversation.append({"role": "assistant", "content": content})
                 
                 try:
                     response_data = json.loads(content)
-                except json.JSONDecodeError:
-                    logger.warning(f"Invalid JSON response: {content}")
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Invalid JSON response: {content[:200]}... Error: {e}")
                     conversation.append({
                         "role": "user", 
-                        "content": "Your response was not valid JSON. Please try again!"
+                        "content": "Your response was not valid JSON. Please try again and ensure proper JSON format!"
                     })
                     continue
                 
@@ -164,7 +184,7 @@ Here are the objects to be ranked:
                 fixed_data, missing_ids = self._validate_and_fix_response(response_data, input_ids)
                 
                 if missing_ids:
-                    logger.warning(f"Missing IDs: {missing_ids}")
+                    logger.warning(f"Missing IDs in response: {missing_ids}")
                     conversation.append({
                         "role": "user",
                         "content": f"Your response was missing these IDs: {missing_ids}. "
@@ -183,14 +203,45 @@ Here are the objects to be ranked:
                             ))
                             break
                 
+                if not ranked_objects:
+                    logger.error("No valid ranked objects created from response")
+                    conversation.append({
+                        "role": "user",
+                        "content": "No valid objects were found in your response. Please provide the ranking correctly."
+                    })
+                    continue
+                
+                logger.info(f"Successfully ranked {len(ranked_objects)} objects")
                 return ranked_objects
                 
-            except Exception as e:
-                logger.error(f"OpenAI API error (attempt {attempt + 1}): {e}")
+            except asyncio.TimeoutError:
+                logger.error(f"OpenAI API timeout (attempt {attempt + 1})")
                 if attempt == max_retries - 1:
-                    raise
+                    raise RuntimeError(f"OpenAI API timed out after {max_retries} attempts")
                 
                 await asyncio.sleep(backoff)
+                backoff *= 2
+                
+            except Exception as e:
+                error_msg = str(e)
+                logger.error(f"OpenAI API error (attempt {attempt + 1}): {error_msg}")
+                
+                # Check for specific error types
+                if "rate limit" in error_msg.lower():
+                    logger.warning("Rate limit hit, waiting longer before retry")
+                    await asyncio.sleep(backoff * 2)
+                elif "timeout" in error_msg.lower():
+                    logger.warning("Timeout error, increasing backoff")
+                    await asyncio.sleep(backoff)
+                elif "connection" in error_msg.lower():
+                    logger.warning("Connection error, retrying with backoff")
+                    await asyncio.sleep(backoff)
+                else:
+                    await asyncio.sleep(backoff)
+                
+                if attempt == max_retries - 1:
+                    raise RuntimeError(f"Failed to rank batch after {max_retries} attempts: {error_msg}")
+                
                 backoff *= 2
         
         raise RuntimeError(f"Failed to rank batch after {max_retries} attempts")
@@ -300,30 +351,50 @@ Here are the objects to be ranked:
         
         for attempt in range(max_retries):
             try:
-                response = await self.client.chat.completions.create(
-                    model=self.config.openrouter_model,
-                    messages=conversation,
-                    response_format={
-                        "type": "json_schema",
-                        "json_schema": {
-                            "name": "ranked_objects",
-                            "schema": self.schema,
-                            "strict": True
-                        }
-                    },
-                    timeout=30.0
+                # Create response with enhanced timeout and error handling
+                response = await asyncio.wait_for(
+                    self.client.chat.completions.create(
+                        model=self.config.openrouter_model,
+                        messages=conversation,
+                        response_format={
+                            "type": "json_schema",
+                            "json_schema": {
+                                "name": "ranked_objects",
+                                "schema": self.schema,
+                                "strict": True
+                            }
+                        },
+                        timeout=30.0
+                    ),
+                    timeout=45.0  # Slightly longer timeout for the overall operation
                 )
                 
+                if not response.choices:
+                    logger.warning("Empty response from OpenRouter API")
+                    conversation.append({
+                        "role": "user", 
+                        "content": "You provided an empty response. Please rank the objects as requested."
+                    })
+                    continue
+                
                 content = response.choices[0].message.content
+                if not content:
+                    logger.warning("Empty content in OpenRouter response")
+                    conversation.append({
+                        "role": "user", 
+                        "content": "Your response was empty. Please provide the ranking as requested."
+                    })
+                    continue
+                
                 conversation.append({"role": "assistant", "content": content})
                 
                 try:
                     response_data = json.loads(content)
-                except json.JSONDecodeError:
-                    logger.warning(f"Invalid JSON response: {content}")
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Invalid JSON response: {content[:200]}... Error: {e}")
                     conversation.append({
                         "role": "user", 
-                        "content": "Your response was not valid JSON. Please try again!"
+                        "content": "Your response was not valid JSON. Please try again and ensure proper JSON format!"
                     })
                     continue
                 
@@ -331,7 +402,7 @@ Here are the objects to be ranked:
                 fixed_data, missing_ids = self._validate_and_fix_response(response_data, input_ids)
                 
                 if missing_ids:
-                    logger.warning(f"Missing IDs: {missing_ids}")
+                    logger.warning(f"Missing IDs in response: {missing_ids}")
                     conversation.append({
                         "role": "user",
                         "content": f"Your response was missing these IDs: {missing_ids}. "
@@ -350,14 +421,45 @@ Here are the objects to be ranked:
                             ))
                             break
                 
+                if not ranked_objects:
+                    logger.error("No valid ranked objects created from response")
+                    conversation.append({
+                        "role": "user",
+                        "content": "No valid objects were found in your response. Please provide the ranking correctly."
+                    })
+                    continue
+                
+                logger.info(f"Successfully ranked {len(ranked_objects)} objects")
                 return ranked_objects
                 
-            except Exception as e:
-                logger.error(f"OpenRouter API error (attempt {attempt + 1}): {e}")
+            except asyncio.TimeoutError:
+                logger.error(f"OpenRouter API timeout (attempt {attempt + 1})")
                 if attempt == max_retries - 1:
-                    raise
+                    raise RuntimeError(f"OpenRouter API timed out after {max_retries} attempts")
                 
                 await asyncio.sleep(backoff)
+                backoff *= 2
+                
+            except Exception as e:
+                error_msg = str(e)
+                logger.error(f"OpenRouter API error (attempt {attempt + 1}): {error_msg}")
+                
+                # Check for specific error types
+                if "rate limit" in error_msg.lower():
+                    logger.warning("Rate limit hit, waiting longer before retry")
+                    await asyncio.sleep(backoff * 2)
+                elif "timeout" in error_msg.lower():
+                    logger.warning("Timeout error, increasing backoff")
+                    await asyncio.sleep(backoff)
+                elif "connection" in error_msg.lower():
+                    logger.warning("Connection error, retrying with backoff")
+                    await asyncio.sleep(backoff)
+                else:
+                    await asyncio.sleep(backoff)
+                
+                if attempt == max_retries - 1:
+                    raise RuntimeError(f"Failed to rank batch after {max_retries} attempts: {error_msg}")
+                
                 backoff *= 2
         
         raise RuntimeError(f"Failed to rank batch after {max_retries} attempts")

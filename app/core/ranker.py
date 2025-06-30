@@ -63,8 +63,8 @@ class RankingEngine:
         """Convert input objects to internal processing format."""
         processed = []
         for obj in objects:
-            # Generate ID if not provided
-            obj_id = obj.id if obj.id else self.generate_short_id(obj.value)
+            # Use client-provided key, fallback to id, then generate short ID
+            obj_id = obj.key or obj.id or self.generate_short_id(obj.value)
             
             processed.append(ProcessingObject(
                 id=obj_id,
@@ -165,7 +165,7 @@ Here are the objects to be ranked:
 
 """
     
-    async def rank(self, objects: List[ProcessingObject], prompt: str) -> List[RankedResult]:
+    async def rank(self, objects: List[ProcessingObject], prompt: str, progress_callback=None) -> List[RankedResult]:
         """Main ranking function implementing the tournament algorithm."""
         logger.info(f"Starting ranking of {len(objects)} objects")
         
@@ -174,7 +174,7 @@ Here are the objects to be ranked:
         self.adjust_batch_size(objects)
         
         # Start recursive ranking
-        results = await self._rank_recursive(objects, prompt, round_num=1)
+        results = await self._rank_recursive(objects, prompt, round_num=1, progress_callback=progress_callback)
         
         # Convert to final format
         final_results = []
@@ -194,7 +194,8 @@ Here are the objects to be ranked:
         self, 
         objects: List[ProcessingObject], 
         prompt: str,
-        round_num: int
+        round_num: int,
+        progress_callback=None
     ) -> List[Dict[str, Any]]:
         """Recursive ranking implementation."""
         self.round = round_num
@@ -217,7 +218,7 @@ Here are the objects to be ranked:
         self.num_batches = len(objects) // self.config.batch_size
         
         # Process with shuffle-batch-rank
-        results = await self._shuffle_batch_rank(objects, prompt)
+        results = await self._shuffle_batch_rank(objects, prompt, progress_callback)
         
         # Check if we should continue with refinement
         if self.config.refinement_ratio == 0:
@@ -244,7 +245,7 @@ Here are the objects to be ranked:
                     break
         
         # Recursive call
-        refined_top = await self._rank_recursive(top_objects, prompt, round_num + 1)
+        refined_top = await self._rank_recursive(top_objects, prompt, round_num + 1, progress_callback)
         
         # Adjust scores by depth (lower scores = better rank)
         for result in refined_top:
@@ -256,7 +257,8 @@ Here are the objects to be ranked:
     async def _shuffle_batch_rank(
         self, 
         objects: List[ProcessingObject], 
-        prompt: str
+        prompt: str,
+        progress_callback=None
     ) -> List[Dict[str, Any]]:
         """Implement shuffle-batch-rank algorithm with multiple runs."""
         scores = {}
@@ -266,6 +268,7 @@ Here are the objects to be ranked:
         first_run_remainder = []
         
         for run in range(self.config.num_runs):
+            run_start_time = time.time()
             logger.info(f"Round {self.round}, Run {run+1}/{self.config.num_runs}")
             
             # Shuffle objects
@@ -287,24 +290,74 @@ Here are the objects to be ranked:
                 batch_tasks.append(task)
             
             # Wait for all batches to complete
-            batch_results = await asyncio.gather(*batch_tasks)
-            
-            # Aggregate results
-            for ranked_batch in batch_results:
-                for ranked_obj in ranked_batch:
-                    obj_id = ranked_obj.obj.id
-                    if obj_id not in scores:
-                        scores[obj_id] = []
-                        exposure_counts[obj_id] = 0
-                    
-                    scores[obj_id].append(ranked_obj.score)
-                    exposure_counts[obj_id] += 1
+            try:
+                batch_results = await asyncio.gather(*batch_tasks)
+                
+                # Aggregate results
+                for ranked_batch in batch_results:
+                    for ranked_obj in ranked_batch:
+                        obj_id = ranked_obj.obj.id
+                        if obj_id not in scores:
+                            scores[obj_id] = []
+                            exposure_counts[obj_id] = 0
+                        
+                        scores[obj_id].append(ranked_obj.score)
+                        exposure_counts[obj_id] += 1
+            except Exception as e:
+                # Send error callback if provided
+                if progress_callback:
+                    error_event = {
+                        "event_type": "error",
+                        "message": f"An error occurred during run {run + 1}: {str(e)}",
+                        "run_number": run + 1
+                    }
+                    try:
+                        await progress_callback(error_event)
+                    except Exception as callback_error:
+                        logger.error(f"Error callback failed: {callback_error}")
+                raise
             
             # Save remainder for first run
             if run == 0:
                 remainder_start = self.num_batches * self.config.batch_size
                 if remainder_start < len(shuffled):
                     first_run_remainder = shuffled[remainder_start:].copy()
+            
+            # Send progress callback if provided
+            if progress_callback:
+                run_time_ms = int((time.time() - run_start_time) * 1000)
+                
+                # Calculate intermediate results for this run
+                current_scores = {}
+                for obj_id, score_list in scores.items():
+                    current_scores[obj_id] = sum(score_list) / len(score_list)
+                
+                intermediate_results = []
+                sorted_objects = sorted(objects, key=lambda x: current_scores.get(x.id, float('inf')))
+                for i, obj in enumerate(sorted_objects):
+                    if obj.id in current_scores:
+                        intermediate_results.append({
+                            'key': obj.id,
+                            'value': obj.value,
+                            'metadata': obj.metadata,
+                            'score': current_scores[obj.id],
+                            'exposure': exposure_counts[obj.id],
+                            'rank': i + 1
+                        })
+                
+                # Create progress event
+                progress_event = {
+                    "event_type": "progress",
+                    "run_number": run + 1,
+                    "message": f"Run {run + 1}/{self.config.num_runs} completed.",
+                    "intermediate_results": intermediate_results,
+                    "processing_time_current_run_ms": run_time_ms
+                }
+                
+                try:
+                    await progress_callback(progress_event)
+                except Exception as e:
+                    logger.error(f"Progress callback error: {e}")
         
         # Calculate final scores
         final_scores = {}
