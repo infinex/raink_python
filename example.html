@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Reordering Visualization</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- D3.js for data visualization -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Custom styles to complement Tailwind */
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        /* Style for the D3-managed list items */
+        .ranking-list li {
+            margin-bottom: 0.5rem; /* mb-2 */
+        }
+    </style>
+</head>
+<body class="h-full text-slate-800">
+
+    <div class="min-h-full p-4 sm:p-6 lg:p-8">
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold tracking-tight text-slate-900 text-center">Document Reordering Visualization</h1>
+            <p class="text-center text-slate-500 mt-2">A live-updating mockup of an AI-powered ranking process.</p>
+        </header>
+
+        <!-- Input Section as a collapsible details element at the top -->
+        <details class="max-w-7xl mx-auto mb-8 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <summary class="flex items-center gap-3 cursor-pointer py-2">
+                <!-- Icon -->
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-indigo-500"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                <h2 class="text-xl font-semibold text-slate-900">Input & Configuration</h2>
+            </summary>
+            <form id="rankingForm" class="space-y-5 pt-4 border-t border-slate-200 mt-4">
+                <div>
+                    <label for="apiEndpoint" class="block text-sm font-medium text-slate-700 mb-1">API Endpoint</label>
+                    <input type="url" id="apiEndpoint" value="http://localhost:8001/api/v1/rank" class="block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="http://localhost:8001/api/v1/rank">
+                </div>
+
+                <div>
+                    <label for="prompt" class="block text-sm font-medium text-slate-700 mb-1">Prompt <span class="text-red-500">*</span></label>
+                    <textarea id="prompt" rows="3" class="block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="Enter your ranking prompt..." required>Rank each of these top-level domains (descending order, where most relevant is first) according to their relevancy to the concept of math</textarea>
+                </div>
+
+                <div>
+                    <label for="documents" class="block text-sm font-medium text-slate-700 mb-1">Documents (one per line) <span class="text-red-500">*</span></label>
+                    <textarea id="documents" rows="5" class="block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="Enter items to rank, one per line..." required>edu
+university
+academy</textarea>
+                </div>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label for="batchSize" class="block text-sm font-medium text-slate-700 mb-1">Batch Size</label>
+                        <input type="number" id="batchSize" value="10" min="1" max="100" class="block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label for="numRuns" class="block text-sm font-medium text-slate-700 mb-1">Number of Runs</label>
+                        <input type="number" id="numRuns" value="10" min="1" max="50" class="block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                    </div>
+                </div>
+
+                <div>
+                    <label for="openaiModel" class="block text-sm font-medium text-slate-700 mb-1">AI Model</label>
+                    <input type="text" id="openaiModel" value="gpt-4o-mini" class="block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                </div>
+
+                <div>
+                    <label for="apiKey" class="block text-sm font-medium text-slate-700 mb-1">API Key <span class="text-red-500">*</span></label>
+                    <input type="password" id="apiKey" value="" class="block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="Enter your OpenAI API key..." required>
+                </div>
+
+                <div id="connectionStatus" class="hidden">
+                    <div class="flex items-center gap-2 text-sm">
+                        <div id="statusIndicator" class="w-2 h-2 rounded-full bg-gray-400"></div>
+                        <span id="statusText">Disconnected</span>
+                    </div>
+                </div>
+
+                <button type="submit" id="startRanking" class="w-full inline-flex justify-center items-center px-4 py-2.5 border border-transparent text-sm font-semibold rounded-lg shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-slate-400 disabled:cursor-not-allowed">
+                    <span id="buttonText">Start Ranking</span>
+                    <svg id="loadingSpinner" class="hidden animate-spin ml-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </button>
+            </form>
+        </details>
+
+        <!-- Output Section - now fills full width below the collapsible input -->
+        <main class="max-w-7xl mx-auto space-y-8">
+            <!-- Progress Overview -->
+            <section class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <h2 class="text-xl font-semibold text-slate-900 mb-4">Reordering Progress</h2>
+                <div class="progress-indicator">
+                    <div class="flex justify-between mb-1">
+                        <span class="text-sm font-medium text-slate-700" id="statusMessage">Simulating ranking process...</span>
+                    </div>
+                    <div class="w-full bg-slate-200 rounded-full h-2.5">
+                        <div id="progressBar" class="bg-indigo-500 h-2.5 rounded-full transition-all duration-500 ease-out" style="width: 0%"></div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Ranking List -->
+            <section class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <div class="flex items-center gap-3 mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-indigo-500"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                    <h3 class="text-xl font-semibold text-slate-900">Live Rankings</h3>
+                </div>
+                <ul id="rankingList" class="ranking-list">
+                    <!-- Documents will be dynamically inserted here -->
+                </ul>
+            </section>
+
+            <!-- Raw Output -->
+            <section>
+                <h3 class="text-lg font-semibold text-slate-800 mb-2 text-center">Simulated Raw Output Stream</h3>
+                <pre id="outputStream" class="bg-slate-800 text-slate-100 text-xs rounded-lg p-4 max-h-60 overflow-y-auto w-full whitespace-pre-wrap word-break-all"></pre>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        // --- DOM Element Selection ---
+        const progressBar = document.getElementById('progressBar');
+        const statusMessage = document.getElementById('statusMessage');
+        const outputStream = document.getElementById('outputStream');
+        const rankingList = d3.select("#rankingList");
+
+        // Define the maximum length for truncated text
+        const TRUNCATION_LENGTH = 200; // Increased truncation length for more lines
+
+        // --- Helper Functions ---
+        /**
+         * Truncates a given text string to a maximum length, adding ellipsis if truncated.
+         * @param {string} text - The input text string.
+         * @param {number} maxLength - The maximum desired length of the text.
+         * @returns {string} The truncated or original text.
+         */
+        function truncateText(text, maxLength) {
+            if (text.length > maxLength) {
+                return text.substring(0, maxLength - 3) + '...';
+            }
+            return text;
+        }
+        
+        // --- D3 List Update Function (No Animations) ---
+        /**
+         * Updates the D3-managed list of rankings based on new data.
+         * This function handles entering, updating, and exiting elements without transitions,
+         * and includes logic for expanding/collapsing long document descriptions.
+         * @param {Array<Object>} data - An array of ranking objects, each with 'key', 'value', 'score', 'exposure', 'rank'.
+         */
+        function updateList(data) {
+            // Sort data by score (ascending, lower score is better rank)
+            data.sort((a, b) => a.score - b.score);
+
+            // D3's data join pattern
+            const listItems = rankingList.selectAll("li")
+                .data(data, d => d.key); // Key function for object constancy
+
+            // --- EXIT ---
+            // Remove old items instantly
+            listItems.exit().remove();
+                
+            // --- UPDATE ---
+            // Update existing items instantly
+            listItems
+                .html(d => {
+                    const isLongText = d.value.length > TRUNCATION_LENGTH;
+                    const displayText = (isLongText && !d.isExpanded) ? truncateText(d.value, TRUNCATION_LENGTH) : d.value;
+                    const toggleButtonHtml = isLongText ? 
+                        `<button class="text-indigo-600 hover:text-indigo-800 text-sm focus:outline-none toggle-document" data-key="${d.key}">
+                            ${d.isExpanded ? 'Show Less' : 'Show More'}
+                         </button>` : '';
+
+                    return `
+                        <div class="flex-grow min-w-0">
+                            <p class="font-medium text-slate-800">${displayText}</p>
+                            ${toggleButtonHtml}
+                        </div>
+                        <div class="text-right ml-4 flex-shrink-0">
+                            <p class="font-semibold text-indigo-600">${d.score.toFixed(2)}</p>
+                            <p class="text-xs text-slate-400">Avg Score</p>
+                        </div>
+                    `;
+                });
+
+            // --- ENTER ---
+            // Add new items instantly
+            listItems.enter().append("li")
+                .attr("class", "flex items-start justify-between bg-slate-50 p-4 rounded-lg border border-slate-200")
+                .html(d => {
+                    // Initialize isExpanded state for new items
+                    d.isExpanded = false; 
+                    const isLongText = d.value.length > TRUNCATION_LENGTH;
+                    const displayText = (isLongText && !d.isExpanded) ? truncateText(d.value, TRUNCATION_LENGTH) : d.value;
+                    const toggleButtonHtml = isLongText ? 
+                        `<button class="text-indigo-600 hover:text-indigo-800 text-sm focus:outline-none toggle-document" data-key="${d.key}">
+                            ${d.isExpanded ? 'Show Less' : 'Show More'}
+                         </button>` : '';
+
+                    return `
+                        <div class="flex-grow min-w-0">
+                            <p class="font-medium text-slate-800">${displayText}</p>
+                            ${toggleButtonHtml}
+                        </div>
+                        <div class="text-right ml-4 flex-shrink-0">
+                            <p class="font-semibold text-indigo-600">${d.score.toFixed(2)}</p>
+                            <p class="text-xs text-slate-400">Avg Score</p>
+                        </div>
+                    `;
+                });
+
+            // Reorder the DOM elements to match the data order
+            rankingList.selectAll("li")
+                .data(data, d => d.key)
+                .order();
+        }
+
+        // --- Mock Data & Simulation Logic ---
+        // Enhanced mock data to include longer document descriptions
+        const mockStreamData = [
+            {"event_type":"status","status":"starting","message":"Starting 10 ranking runs for 3 objects."},
+            {"event_type":"progress","run_number":1,"message":"Run 1/10 completed.","intermediate_results":[{"key":"5hO7RCvw","value":"edu","metadata":null,"score":1.0,"exposure":1,"rank":1},{"key":"5vkz92Jn","value":"academy-of-science-and-arts-specializing-in-advanced-mathematics-and-physics which is a prestigious institution dedicated to fostering groundbreaking research and education in pure and applied mathematics, theoretical physics, and computational sciences. It offers a rigorous curriculum for gifted students and conducts cutting-edge projects with global impact. This academy is recognized worldwide for its contributions to complex analysis, abstract algebra, quantum mechanics, and high-energy physics, attracting top-tier researchers and students globally.","metadata":null,"score":2.0,"exposure":1,"rank":2},{"key":"rbpsDsio","value":"university","metadata":null,"score":3.0,"exposure":1,"rank":3}],"processing_time_current_run_ms":1046},
+            {"event_type":"progress","run_number":2,"message":"Run 2/10 completed.","intermediate_results":[{"key":"5hO7RCvw","value":"edu","metadata":null,"score":1.0,"exposure":2,"rank":1},{"key":"rbpsDsio","value":"university","metadata":null,"score":2.5,"exposure":2,"rank":2},{"key":"5vkz92Jn","value":"academy-of-science-and-arts-specializing-in-advanced-mathematics-and-physics which is a prestigious institution dedicated to fostering groundbreaking research and education in pure and applied mathematics, theoretical physics, and computational sciences. It offers a rigorous curriculum for gifted students and conducts cutting-edge projects with global impact. This academy is recognized worldwide for its contributions to complex analysis, abstract algebra, quantum mechanics, and high-energy physics, attracting top-tier researchers and students globally.","metadata":null,"score":2.5,"exposure":2,"rank":3}],"processing_time_current_run_ms":1540},
+            {"event_type":"progress","run_number":3,"message":"Run 3/10 completed.","intermediate_results":[{"key":"5hO7RCvw","value":"edu","metadata":null,"score":1.0,"exposure":3,"rank":1},{"key":"rbpsDsio","value":"university-of-california-berkeley-leading-research-institution with renowned departments in mathematics, statistics, and computer science, contributing significantly to advancements in algorithm design, number theory, and scientific computing. Its faculty includes Nobel laureates and Fields Medalists, and it is consistently ranked among the top global universities for research output and academic excellence, especially in theoretical computer science and discrete mathematics.","metadata":null,"score":2.3333333333333335,"exposure":3,"rank":2},{"key":"5vkz92Jn","value":"academy-of-science-and-arts-specializing-in-advanced-mathematics-and-physics which is a prestigious institution dedicated to fostering groundbreaking research and education in pure and applied mathematics, theoretical physics, and computational sciences. It offers a rigorous curriculum for gifted students and conducts cutting-edge projects with global impact. This academy is recognized worldwide for its contributions to complex analysis, abstract algebra, quantum mechanics, and high-energy physics, attracting top-tier researchers and students globally.","metadata":null,"score":2.6666666666666665,"exposure":3,"rank":3}],"processing_time_current_run_ms":1085},
+            {"event_type":"progress","run_number":4,"message":"Run 4/10 completed.","intermediate_results":[{"key":"5hO7RCvw","value":"edu","metadata":null,"score":1.0,"exposure":4,"rank":1},{"key":"rbpsDsio","value":"university-of-california-berkeley-leading-research-institution with renowned departments in mathematics, statistics, and computer science, contributing significantly to advancements in algorithm design, number theory, and scientific computing. Its faculty includes Nobel laureates and Fields Medalists, and it is consistently ranked among the top global universities for research output and academic excellence, especially in theoretical computer science and discrete mathematics.","metadata":null,"score":2.25,"exposure":4,"rank":2},{"key":"5vkz92Jn","value":"academy-of-science-and-arts-specializing-in-advanced-mathematics-and-physics which is a prestigious institution dedicated to fostering groundbreaking research and education in pure and applied mathematics, theoretical physics, and computational sciences. It offers a rigorous curriculum for gifted students and conducts cutting-edge projects with global impact. This academy is recognized worldwide for its contributions to complex analysis, abstract algebra, quantum mechanics, and high-energy physics, attracting top-tier researchers and students globally.","metadata":null,"score":2.75,"exposure":4,"rank":3}],"processing_time_current_run_ms":1010},
+            {"event_type":"progress","run_number":5,"message":"Run 5/10 completed.","intermediate_results":[{"key":"5hO7RCvw","value":"edu","metadata":null,"score":1.0,"exposure":5,"rank":1},{"key":"rbpsDsio","value":"university-of-california-berkeley-leading-research-institution with renowned departments in mathematics, statistics, and computer science, contributing significantly to advancements in algorithm design, number theory, and scientific computing. Its faculty includes Nobel laureates and Fields Medalists, and it is consistently ranked among the top global universities for research output and academic excellence, especially in theoretical computer science and discrete mathematics.","metadata":null,"score":2.4,"exposure":5,"rank":2},{"key":"5vkz92Jn","value":"academy-of-science-and-arts-specializing-in-advanced-mathematics-and-physics which is a prestigious institution dedicated to fostering groundbreaking research and education in pure and applied mathematics, theoretical physics, and computational sciences. It offers a rigorous curriculum for gifted students and conducts cutting-edge projects with global impact. This academy is recognized worldwide for its contributions to complex analysis, abstract algebra, quantum mechanics, and high-energy physics, attracting top-tier researchers and students globally.","metadata":null,"score":2.6,"exposure":5,"rank":3}],"processing_time_current_run_ms":1101},
+            {"event_type":"progress","run_number":6,"message":"Run 6/10 completed.","intermediate_results":[{"key":"5hO7RCvw","value":"edu","metadata":null,"score":1.0,"exposure":6,"rank":1},{"key":"rbpsDsio","value":"university-of-california-berkeley-leading-research-institution with renowned departments in mathematics, statistics, and computer science, contributing significantly to advancements in algorithm design, number theory, and scientific computing. Its faculty includes Nobel laureates and Fields Medalists, and it is consistently ranked among the top global universities for research output and academic excellence, especially in theoretical computer science and discrete mathematics.","metadata":null,"score":2.3,"exposure":6,"rank":2},{"key":"5vkz92Jn","value":"academy-of-science-and-arts-specializing-in-advanced-mathematics-and-physics which is a prestigious institution dedicated to fostering groundbreaking research and education in pure and applied mathematics, theoretical physics, and computational sciences. It offers a rigorous curriculum for gifted students and conducts cutting-edge projects with global impact. This academy is recognized worldwide for its contributions to complex analysis, abstract algebra, quantum mechanics, and high-energy physics, attracting top-tier researchers and students globally.","metadata":null,"score":2.7,"exposure":6,"rank":3}],"processing_time_current_run_ms":1050},
+            {"event_type":"progress","run_number":7,"message":"Run 7/10 completed.","intermediate_results":[{"key":"5hO7RCvw","value":"edu","metadata":null,"score":1.0,"exposure":7,"rank":1},{"key":"rbpsDsio","value":"university-of-california-berkeley-leading-research-institution with renowned departments in mathematics, statistics, and computer science, contributing significantly to advancements in algorithm design, number theory, and scientific computing. Its faculty includes Nobel laureates and Fields Medalists, and it is consistently ranked among the top global universities for research output and academic excellence, especially in theoretical computer science and discrete mathematics.","metadata":null,"score":2.2,"exposure":7,"rank":2},{"key":"5vkz92Jn","value":"academy-of-science-and-arts-specializing-in-advanced-mathematics-and-physics which is a prestigious institution dedicated to fostering groundbreaking research and education in pure and applied mathematics, theoretical physics, and computational sciences. It offers a rigorous curriculum for gifted students and conducts cutting-edge projects with global impact. This academy is recognized worldwide for its contributions to complex analysis, abstract algebra, quantum mechanics, and high-energy physics, attracting top-tier researchers and students globally.","metadata":null,"score":2.8,"exposure":7,"rank":3}],"processing_time_current_run_ms":1120},
+            {"event_type":"progress","run_number":8,"message":"Run 8/10 completed.","intermediate_results":[{"key":"5hO7RCvw","value":"edu","metadata":null,"score":1.0,"exposure":8,"rank":1},{"key":"rbpsDsio","value":"university-of-california-berkeley-leading-research-institution with renowned departments in mathematics, statistics, and computer science, contributing significantly to advancements in algorithm design, number theory, and scientific computing. Its faculty includes Nobel laureates and Fields Medalists, and it is consistently ranked among the top global universities for research output and academic excellence, especially in theoretical computer science and discrete mathematics.","metadata":null,"score":2.1,"exposure":8,"rank":2},{"key":"5vkz92Jn","value":"academy-of-science-and-arts-specializing-in-advanced-mathematics-and-physics which is a prestigious institution dedicated to fostering groundbreaking research and education in pure and applied mathematics, theoretical physics, and computational sciences. It offers a rigorous curriculum for gifted students and conducts cutting-edge projects with global impact. This academy is recognized worldwide for its contributions to complex analysis, abstract algebra, quantum mechanics, and high-energy physics, attracting top-tier researchers and students globally.","metadata":null,"score":2.9,"exposure":8,"rank":3}],"processing_time_current_run_ms":1080},
+            {"event_type":"progress","run_number":9,"message":"Run 9/10 completed.","intermediate_results":[{"key":"5hO7RCvw","value":"edu","metadata":null,"score":1.0,"exposure":9,"rank":1},{"key":"rbpsDsio","value":"university-of-california-berkeley-leading-research-institution with renowned departments in mathematics, statistics, and computer science, contributing significantly to advancements in algorithm design, number theory, and scientific computing. Its faculty includes Nobel laureates and Fields Medalists, and it is consistently ranked among the top global universities for research output and academic excellence, especially in theoretical computer science and discrete mathematics.","metadata":null,"score":2.05,"exposure":9,"rank":2},{"key":"5vkz92Jn","value":"academy-of-science-and-arts-specializing-in-advanced-mathematics-and-physics which is a prestigious institution dedicated to fostering groundbreaking research and education in pure and applied mathematics, theoretical physics, and computational sciences. It offers a rigorous curriculum for gifted students and conducts cutting-edge projects with global impact. This academy is recognized worldwide for its contributions to complex analysis, abstract algebra, quantum mechanics, and high-energy physics, attracting top-tier researchers and students globally.","metadata":null,"score":2.95,"exposure":9,"rank":3}],"processing_time_current_run_ms":1030},
+            {"event_type":"progress","run_number":10,"message":"Run 10/10 completed.","intermediate_results":[{"key":"5hO7RCvw","value":"edu","metadata":null,"score":1.0,"exposure":10,"rank":1},{"key":"rbpsDsio","value":"university-of-california-berkeley-leading-research-institution with renowned departments in mathematics, statistics, and computer science, contributing significantly to advancements in algorithm design, number theory, and scientific computing. Its faculty includes Nobel laureates and Fields Medalists, and it is consistently ranked among the top global universities for research output and academic excellence, especially in theoretical computer science and discrete mathematics.","metadata":null,"score":2.0,"exposure":10,"rank":2},{"key":"5vkz92Jn","value":"academy-of-science-and-arts-specializing-in-advanced-mathematics-and-physics which is a prestigious institution dedicated to fostering groundbreaking research and education in pure and applied mathematics, theoretical physics, and computational sciences. It offers a rigorous curriculum for gifted students and conducts cutting-edge projects with global impact. This academy is recognized worldwide for its contributions to complex analysis, abstract algebra, quantum mechanics, and high-energy physics, attracting top-tier researchers and students globally.","metadata":null,"score":3.0,"exposure":10,"rank":3}],"processing_time_current_run_ms":1150},
+            {"event_type":"status","status":"finished","message":"Ranking process complete."}
+        ];
+
+        let totalRuns = 0;
+        let mockDataIndex = 0;
+
+        // An array to hold the current state of documents, including their expanded status
+        let currentDocumentsData = [];
+
+        /**
+         * Simulates a streaming process by iterating through mock data and updating the UI.
+         */
+        function simulateStream() {
+            if (mockDataIndex >= mockStreamData.length) {
+                statusMessage.textContent = 'Simulation finished!';
+                progressBar.classList.add('bg-green-500'); // Change color on completion
+                return;
+            }
+
+            const data = mockStreamData[mockDataIndex];
+            outputStream.textContent += JSON.stringify(data, null, 2) + '\n';
+            outputStream.scrollTop = outputStream.scrollHeight; // Auto-scroll
+
+            if (data.event_type === 'status' && data.status === 'starting') {
+                const match = data.message.match(/Starting (\d+) ranking runs/);
+                if (match && match[1]) {
+                    totalRuns = parseInt(match[1], 10);
+                }
+                statusMessage.textContent = data.message;
+            } else if (data.event_type === 'progress') {
+                const currentRun = data.run_number;
+                if (totalRuns > 0) {
+                    const progress = (currentRun / totalRuns) * 100;
+                    progressBar.style.width = `${progress}%`;
+                }
+                statusMessage.textContent = data.message;
+
+                // Merge new intermediate results with existing data, preserving 'isExpanded' state
+                data.intermediate_results.forEach(newItem => {
+                    const existingItem = currentDocumentsData.find(item => item.key === newItem.key);
+                    if (existingItem) {
+                        // Update existing item, but keep its 'isExpanded' state
+                        Object.assign(existingItem, newItem);
+                    } else {
+                        // Add new item, initializing 'isExpanded' to false
+                        newItem.isExpanded = false;
+                        currentDocumentsData.push(newItem);
+                    }
+                });
+
+                updateList(currentDocumentsData);
+            } else if (data.event_type === 'status' && data.status === 'finished') {
+                statusMessage.textContent = data.message;
+                progressBar.style.width = '100%';
+            }
+
+            mockDataIndex++;
+            setTimeout(simulateStream, 1500); // Simulate delay between events
+        }
+
+        // Event delegation for the toggle buttons
+        rankingList.on("click", function(event) {
+            const target = event.target;
+            if (target.classList.contains("toggle-document")) {
+                const keyToToggle = target.dataset.key;
+                const item = currentDocumentsData.find(d => d.key === keyToToggle);
+                if (item) {
+                    item.isExpanded = !item.isExpanded; // Toggle the state
+                    updateList(currentDocumentsData); // Re-render the list
+                }
+            }
+        });
+        
+        // --- Initializer ---
+        window.onload = function() {
+            // Initial call to set up the list area
+            updateList([]);
+            // Start the simulation after a brief delay
+            setTimeout(simulateStream, 1000);
+        };
+    </script>
+</body>
+</html>
+
